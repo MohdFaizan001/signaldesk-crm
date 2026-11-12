@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+/* ─── SignalDesk Design System ─── */
+
+@theme {
+  --color-bg-primary: #F7F8FA;
+  --color-bg-surface: #FFFFFF;
+  --color-sidebar: #17212F;
+  --color-sidebar-hover: #1E2A3A;
+  --color-sidebar-active: #243347;
+  --color-text-primary: #202B3C;
+  --color-text-secondary: #5F6B7A;
+  --color-text-muted: #8896A6;
+  --color-accent: #4263D8;
+  --color-accent-hover: #3652C4;
+  --color-accent-light: #EEF1FC;
+  --color-teal: #0D9488;
+  --color-teal-light: #ECFDF5;
+  --color-border: #E5E7EB;
+  --color-border-light: #F0F1F3;
+  --color-success: #16A34A;
+  --color-success-light: #F0FDF4;
+  --color-warning: #D97706;
+  --color-warning-light: #FFFBEB;
+  --color-danger: #DC2626;
+  --color-danger-light: #FEF2F2;
+}
+
+/* ─── Base Styles ─── */
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-bg-primary text-text-primary;
+  }
+
+  /* Dark mode overrides */
+  html.dark {
+    --color-bg-primary: #0F1419;
+    --color-bg-surface: #1A1F2E;
+    --color-sidebar: #0D1117;
+    --color-sidebar-hover: #151B24;
+    --color-sidebar-active: #1C2333;
+    --color-text-primary: #E1E4E8;
+    --color-text-secondary: #8B949E;
+    --color-text-muted: #6E7681;
+    --color-accent: #5B7FFF;
+    --color-accent-hover: #4A6EEE;
+    --color-accent-light: #1C2333;
+    --color-border: #2D333B;
+    --color-border-light: #21262D;
+  }
+}
+
+/* ─── Scrollbar ─── */
+
+@layer base {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-text-muted;
+  }
+}
+
+/* ─── Utilities ─── */
+
+@utility animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@utility animate-slide-up {
+  animation: slideUp 0.25s ease-out;
+}
+
+@utility animate-slide-in-right {
+  animation: slideInRight 0.25s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ─── Inter Font Import ─── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
