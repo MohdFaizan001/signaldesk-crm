@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { cn } from '../../utils';
+import { cn, getInitials } from '../../utils';
+import { useAuth } from '../../auth/AuthProvider';
 import {
   LayoutDashboard, Users, GitBranch, CalendarClock, Brain,
   Upload, Settings, X, ChevronDown, Signal
@@ -42,6 +43,7 @@ const navGroups = [
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
+  const { profile } = useAuth();
 
   return (
     <>
@@ -106,16 +108,18 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         {/* User footer */}
         <div className="border-t border-white/8 p-3">
-          <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-sidebar-hover transition-colors cursor-pointer">
+          <NavLink to="/settings" onClick={onClose} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-sidebar-hover transition-colors">
             <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-accent text-xs font-semibold">
-              SM
+              {profile?.fullName ? getInitials(profile.fullName) : 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-white/90 font-medium truncate">Sarah Mitchell</p>
-              <p className="text-[11px] text-white/40 truncate">Admin</p>
+              <p className="text-sm text-white/90 font-medium truncate">{profile?.fullName || profile?.email || 'Account'}</p>
+              <p className="text-[11px] text-white/40 truncate">
+                {profile?.role === 'admin' ? 'Admin' : 'Sales Rep'}
+              </p>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-white/30" />
-          </div>
+          </NavLink>
         </div>
       </aside>
     </>

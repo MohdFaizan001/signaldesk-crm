@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Menu, Moon, Sun } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut } from 'lucide-react';
 import { Avatar, Dropdown, DropdownItem } from '../ui';
-import { toast } from 'sonner';
+import { useAuth } from '../../auth/AuthProvider';
 
 interface TopbarProps {
   onMenuToggle: () => void;
@@ -22,6 +22,9 @@ const pageTitles: Record<string, { title: string; breadcrumb?: string[] }> = {
 export function Topbar({ onMenuToggle, isDark, onThemeToggle }: TopbarProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { profile, signOut } = useAuth();
+  const displayName = profile?.fullName || profile?.email?.split('@')[0] || 'Account';
+  const firstName = displayName.split(' ')[0];
   const pathKey = Object.keys(pageTitles).find(
     (key) => key === '/' ? location.pathname === '/' : location.pathname.startsWith(key)
   );
@@ -65,15 +68,24 @@ export function Topbar({ onMenuToggle, isDark, onThemeToggle }: TopbarProps) {
           <Dropdown
             trigger={
               <button className="flex items-center gap-2 p-1 rounded-lg hover:bg-bg-primary transition-colors">
-                <Avatar name="Sarah Mitchell" size="sm" />
-                <span className="hidden md:block text-sm text-text-primary font-medium">Sarah</span>
+                <Avatar name={displayName} size="sm" />
+                <span className="hidden md:block text-sm text-text-primary font-medium">{firstName}</span>
               </button>
             }
           >
             <DropdownItem onClick={() => navigate('/settings')}>Profile</DropdownItem>
             <DropdownItem onClick={() => navigate('/settings')}>Account Settings</DropdownItem>
             <div className="border-t border-border my-1" />
-            <DropdownItem onClick={() => toast.info('Sign out is not available in mock mode')} variant="danger">Sign Out</DropdownItem>
+            <DropdownItem
+              icon={<LogOut className="w-3.5 h-3.5" />}
+              onClick={async () => {
+                await signOut();
+                navigate('/login', { replace: true });
+              }}
+              variant="danger"
+            >
+              Sign Out
+            </DropdownItem>
           </Dropdown>
         </div>
       </div>

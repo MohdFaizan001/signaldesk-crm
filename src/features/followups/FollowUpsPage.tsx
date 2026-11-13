@@ -1,19 +1,24 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarClock, CheckCircle2, AlertTriangle, Clock, Phone, Mail,
-  Video, FileText, Presentation, Check, Plus
+  Video, FileText, Presentation, Check, Plus, AlertCircle
 } from 'lucide-react';
 import {
   Card, Button, Tabs, PriorityBadge, Badge, LoadingSpinner, EmptyState,
   ConfirmDialog, Dialog, Input, Select, Textarea
 } from '../../components/ui';
-import { useFollowUps } from '../../hooks';
-import { formatDate, cn } from '../../utils';
-import { teamMembers } from '../../data/mockData';
-import * as api from '../../services/mockService';
+import {
+  useCompleteFollowUp,
+  useCreateFollowUp,
+  useFollowUpsQuery,
+  useLeadsQuery,
+  useProfiles,
+} from '../../hooks';
+import { useAuth } from '../../auth/AuthProvider';
+import { formatDateTime, cn } from '../../utils';
 import { toast } from 'sonner';
-import type { FollowUp, FollowUpType, Lead } from '../../types';
+import type { FollowUp, FollowUpType, LeadPriority } from '../../types';
 
 const typeConfig: Record<FollowUpType, { icon: React.ReactNode; label: string; color: string }> = {
   call: { icon: <Phone className="w-3.5 h-3.5" />, label: 'Call', color: 'bg-blue-100 text-blue-700' },
@@ -24,30 +29,30 @@ const typeConfig: Record<FollowUpType, { icon: React.ReactNode; label: string; c
 };
 
 export function FollowUpsPage() {
-  const { followUps, loading, fetchFollowUps, addFollowUp, complete } = useFollowUps();
+  const { data, isLoading, isError, error } = useFollowUpsQuery({ view: 'all', pageSize: 100 });
+  const completeFollowUp = useCompleteFollowUp();
+  const createFollowUp = useCreateFollowUp();
+
   const [activeTab, setActiveTab] = useState('overdue');
   const [completing, setCompleting] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  useEffect(() => { fetchFollowUps(); }, [fetchFollowUps]);
+  const followUps = data?.items ?? [];
+  const overdue = useMemo(() => followUps.filter((item) => item.status === 'overdue'), [followUps]);
+  const upcoming = useMemo(() => followUps.filter((item) => item.status === 'upcoming'), [followUps]);
+  const completed = useMemo(() => followUps.filter((item) => item.status === 'completed'), [followUps]);
 
-  const overdue = useMemo(() => followUps.filter((f) => f.status === 'overdue'), [followUps]);
-  const upcoming = useMemo(() => followUps.filter((f) => f.status === 'upcoming'), [followUps]);
-  const completed = useMemo(() => followUps.filter((f) => f.status === 'completed'), [followUps]);
+  if (isLoading) return <LoadingSpinner />;
 
-  const handleComplete = async () => {
-    if (completing) {
-      await complete(completing);
-      setCompleting(null);
-    }
-  };
-
-  const handleCreate = async (data: Omit<FollowUp, 'id'>) => {
-    await addFollowUp(data);
-    setShowCreate(false);
-  };
-
-  if (loading) return <LoadingSpinner />;
+  if (isError) {
+    return (
+      <EmptyState
+        icon={<AlertCircle className="w-5 h-5" />}
+        title="Could not load follow-ups"
+        description={error instanceof Error ? error.message : 'The API request failed.'}
+      />
+    );
+  }
 
   const tabs = [
     { id: 'overdue', label: 'Overdue', count: overdue.length },
@@ -73,32 +78,12 @@ export function FollowUpsPage() {
         </Button>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <SummaryCard
-          icon={<AlertTriangle className="w-4 h-4" />}
-          label="Overdue"
-          count={overdue.length}
-          color="text-danger"
-          bgColor="bg-danger-light border-red-200"
-        />
-        <SummaryCard
-          icon={<Clock className="w-4 h-4" />}
-          label="Upcoming"
-          count={upcoming.length}
-          color="text-amber-600"
-          bgColor="bg-warning-light border-amber-200"
-        />
-        <SummaryCard
-          icon={<CheckCircle2 className="w-4 h-4" />}
-          label="Completed"
-          count={completed.length}
-          color="text-green-600"
-          bgColor="bg-success-light border-green-200"
-        />
+        <SummaryCard icon={<AlertTriangle className="w-4 h-4" />} label="Overdue" count={overdue.length} color="text-danger" bgColor="bg-danger-light border-red-200" />
+        <SummaryCard icon={<Clock className="w-4 h-4" />} label="Upcoming" count={upcoming.length} color="text-amber-600" bgColor="bg-warning-light border-amber-200" />
+        <SummaryCard icon={<CheckCircle2 className="w-4 h-4" />} label="Completed" count={completed.length} color="text-green-600" bgColor="bg-success-light border-green-200" />
       </div>
 
-      {/* Tabs & List */}
       <Card padding={false}>
         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} className="px-5" />
         <div className="divide-y divide-border-light">
@@ -109,12 +94,8 @@ export function FollowUpsPage() {
               description={activeTab === 'overdue' ? 'Great work — nothing is overdue!' : 'No follow-ups in this category.'}
             />
           ) : (
-            currentList.map((fu) => (
-              <FollowUpRow
-                key={fu.id}
-                followUp={fu}
-                onComplete={() => setCompleting(fu.id)}
-              />
+            currentList.map((followUp) => (
+              <FollowUpRow key={followUp.id} followUp={followUp} onComplete={() => setCompleting(followUp.id)} />
             ))
           )}
         </div>
@@ -123,15 +104,27 @@ export function FollowUpsPage() {
       <ConfirmDialog
         open={!!completing}
         onClose={() => setCompleting(null)}
-        onConfirm={handleComplete}
+        onConfirm={async () => {
+          if (!completing) return;
+          await completeFollowUp.mutateAsync(completing);
+          setCompleting(null);
+        }}
         title="Complete Follow-up"
         message="Mark this follow-up as completed?"
         confirmLabel="Complete"
         variant="primary"
+        loading={completeFollowUp.isPending}
       />
 
       <Dialog open={showCreate} onClose={() => setShowCreate(false)} title="Create Follow-up" maxWidth="max-w-xl">
-        <CreateFollowUpForm onSubmit={handleCreate} onCancel={() => setShowCreate(false)} />
+        <CreateFollowUpForm
+          isSubmitting={createFollowUp.isPending}
+          onSubmit={async (input) => {
+            await createFollowUp.mutateAsync(input);
+            setShowCreate(false);
+          }}
+          onCancel={() => setShowCreate(false)}
+        />
       </Dialog>
     </div>
   );
@@ -150,7 +143,7 @@ function SummaryCard({ icon, label, count, color, bgColor }: {
 }
 
 function FollowUpRow({ followUp, onComplete }: { followUp: FollowUp; onComplete: () => void }) {
-  const tc = typeConfig[followUp.type];
+  const config = typeConfig[followUp.type];
   const isOverdue = followUp.status === 'overdue';
   const isCompleted = followUp.status === 'completed';
 
@@ -159,102 +152,94 @@ function FollowUpRow({ followUp, onComplete }: { followUp: FollowUp; onComplete:
       'flex items-start gap-4 px-5 py-4 transition-colors hover:bg-bg-primary/30',
       isOverdue && 'bg-danger-light/30'
     )}>
-      <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0', tc.color)}>
-        {tc.icon}
+      <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0', config.color)}>
+        {config.icon}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm font-medium text-text-primary">{followUp.title}</p>
-          <Badge variant="default">{tc.label}</Badge>
+          <Badge variant="default">{config.label}</Badge>
           <PriorityBadge priority={followUp.priority} />
         </div>
-        <p className="text-xs text-text-secondary mt-1">{followUp.description}</p>
-        <div className="flex items-center gap-3 mt-2 text-xs text-text-muted">
+        {followUp.description && <p className="text-xs text-text-secondary mt-1">{followUp.description}</p>}
+        <div className="flex items-center gap-3 mt-2 text-xs text-text-muted flex-wrap">
           <Link to={`/leads/${followUp.leadId}`} className="hover:text-accent transition-colors">
             {followUp.leadName} · {followUp.company}
           </Link>
           <span>·</span>
           <span className={isOverdue ? 'text-danger font-medium' : ''}>
             {isOverdue ? 'Overdue: ' : isCompleted ? 'Completed: ' : 'Due: '}
-            {formatDate(isCompleted && followUp.completedAt ? followUp.completedAt : followUp.dueDate)}
+            {formatDateTime(isCompleted && followUp.completedAt ? followUp.completedAt : followUp.dueDate)}
           </span>
           <span>·</span>
           <span>{followUp.assignedTo}</span>
         </div>
       </div>
-      {!isCompleted && (
+      {!isCompleted ? (
         <Button variant="ghost" size="sm" onClick={onComplete} className="shrink-0">
           <Check className="w-3.5 h-3.5" /> Done
         </Button>
-      )}
-      {isCompleted && (
+      ) : (
         <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
       )}
     </div>
   );
 }
 
-// ─── Create Follow-up Form ───
-
-function CreateFollowUpForm({ onSubmit, onCancel }: {
-  onSubmit: (data: Omit<FollowUp, 'id'>) => Promise<void>;
+function CreateFollowUpForm({ onSubmit, onCancel, isSubmitting }: {
+  onSubmit: (data: {
+    leadId: string;
+    title: string;
+    description?: string;
+    type: FollowUpType;
+    dueAt: string;
+    priority: LeadPriority;
+    assignedToId?: string;
+  }) => Promise<void>;
   onCancel: () => void;
+  isSubmitting: boolean;
 }) {
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const { profile } = useAuth();
+  const { data: leadsData, isLoading } = useLeadsQuery({ pageSize: 100, sortBy: 'full_name', sortDir: 'asc' });
+  const { data: profiles = [] } = useProfiles();
+  const leads = leadsData?.items ?? [];
+  const assignableProfiles = profile?.role === 'admin' ? profiles : profiles.filter((item) => item.id === profile?.id);
 
   const [leadId, setLeadId] = useState('');
   const [type, setType] = useState<FollowUpType>('call');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
-  const [assignedTo, setAssignedTo] = useState(teamMembers[0].name);
-
+  const [dueAt, setDueAt] = useState('');
+  const [priority, setPriority] = useState<LeadPriority>('medium');
+  const [assignedToId, setAssignedToId] = useState(profile?.id ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    api.getLeads().then((data) => {
-      setLeads(data);
-      if (data.length > 0) setLeadId(data[0].id);
-      setLoading(false);
-    });
-  }, []);
+  const resolvedLeadId = leadId || leads[0]?.id || '';
+  const resolvedAssignee = assignedToId || profile?.id || '';
 
   const validate = (): boolean => {
-    const errs: Record<string, string> = {};
-    if (!leadId) errs.leadId = 'Select a lead';
-    if (!title.trim()) errs.title = 'Title is required';
-    if (!dueDate) errs.dueDate = 'Due date is required';
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
+    const nextErrors: Record<string, string> = {};
+    if (!resolvedLeadId) nextErrors.leadId = 'Select a lead';
+    if (!title.trim()) nextErrors.title = 'Title is required';
+    if (!dueAt) nextErrors.dueAt = 'Due date is required';
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!validate()) return;
-
-    const lead = leads.find((l) => l.id === leadId);
-    if (!lead) { toast.error('Selected lead not found'); return; }
-
     setSubmitting(true);
     try {
-      const dueDateISO = new Date(dueDate).toISOString();
-      const now = new Date();
-      const status = new Date(dueDate) < now ? 'overdue' : 'upcoming';
-
       await onSubmit({
-        leadId,
-        leadName: lead.fullName,
-        company: lead.company,
-        type,
+        leadId: resolvedLeadId,
         title: title.trim(),
-        description: description.trim(),
-        dueDate: dueDateISO,
-        status,
+        description: description.trim() || undefined,
+        type,
+        dueAt: new Date(dueAt).toISOString(),
         priority,
-        assignedTo,
+        assignedToId: resolvedAssignee,
       });
     } catch {
       toast.error('Failed to create follow-up');
@@ -263,22 +248,32 @@ function CreateFollowUpForm({ onSubmit, onCancel }: {
     }
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (isLoading) return <LoadingSpinner />;
+
+  if (leads.length === 0) {
+    return (
+      <EmptyState
+        icon={<CalendarClock className="w-5 h-5" />}
+        title="No leads available"
+        description="Create a lead before scheduling a follow-up."
+      />
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Select
           label="Lead"
-          value={leadId}
-          onChange={(e) => setLeadId(e.target.value)}
-          options={leads.map((l) => ({ value: l.id, label: `${l.fullName} — ${l.company}` }))}
+          value={resolvedLeadId}
+          onChange={(event) => setLeadId(event.target.value)}
+          options={leads.map((lead) => ({ value: lead.id, label: `${lead.fullName} — ${lead.company}` }))}
           error={errors.leadId}
         />
         <Select
           label="Type"
           value={type}
-          onChange={(e) => setType(e.target.value as FollowUpType)}
+          onChange={(event) => setType(event.target.value as FollowUpType)}
           options={[
             { value: 'call', label: 'Call' },
             { value: 'email', label: 'Email' },
@@ -288,51 +283,33 @@ function CreateFollowUpForm({ onSubmit, onCancel }: {
           ]}
         />
         <div className="sm:col-span-2">
-          <Input
-            label="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Follow-up title"
-            error={errors.title}
-          />
+          <Input label="Title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Follow-up title" error={errors.title} />
         </div>
-        <Input
-          label="Due Date"
-          type="datetime-local"
-          value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
-          error={errors.dueDate}
-        />
+        <Input label="Due Date & Time" type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} error={errors.dueAt} />
         <Select
           label="Priority"
           value={priority}
-          onChange={(e) => setPriority(e.target.value as typeof priority)}
+          onChange={(event) => setPriority(event.target.value as LeadPriority)}
           options={[
             { value: 'low', label: 'Low' },
             { value: 'medium', label: 'Medium' },
             { value: 'high', label: 'High' },
-            { value: 'critical', label: 'Critical' },
           ]}
         />
         <div className="sm:col-span-2">
           <Select
             label="Assigned To"
-            value={assignedTo}
-            onChange={(e) => setAssignedTo(e.target.value)}
-            options={teamMembers.map((m) => ({ value: m.name, label: m.name }))}
+            value={resolvedAssignee}
+            onChange={(event) => setAssignedToId(event.target.value)}
+            disabled={profile?.role !== 'admin'}
+            options={assignableProfiles.map((item) => ({ value: item.id, label: item.fullName || item.email }))}
           />
         </div>
       </div>
-      <Textarea
-        label="Description"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        rows={3}
-        placeholder="Details about this follow-up..."
-      />
+      <Textarea label="Description" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder="Details about this follow-up..." />
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" loading={submitting}>Create Follow-up</Button>
+        <Button type="submit" loading={submitting || isSubmitting}>Create Follow-up</Button>
       </div>
     </form>
   );
