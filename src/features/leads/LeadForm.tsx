@@ -2,8 +2,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button, Input, Select, Textarea } from '../../components/ui';
-import { teamMembers } from '../../data/mockData';
-import type { Lead } from '../../types';
+import type { Lead, Profile } from '../../types';
+import type { LeadInput } from '../../services/api';
 
 const leadSchema = z.object({
   fullName: z.string().min(2, 'Name is required'),
@@ -13,7 +13,7 @@ const leadSchema = z.object({
   jobTitle: z.string().min(1, 'Job title is required'),
   source: z.enum(['website', 'referral', 'linkedin', 'cold-call', 'email-campaign', 'trade-show', 'partner']),
   status: z.enum(['new', 'contacted', 'interested', 'negotiation', 'converted', 'lost']),
-  priority: z.enum(['low', 'medium', 'high', 'critical']),
+  priority: z.enum(['low', 'medium', 'high']),
   assignedToId: z.string().min(1, 'Assign to a team member'),
   dealValue: z.coerce.number().min(0).optional(),
   notes: z.string().optional(),
@@ -25,13 +25,18 @@ type LeadFormData = z.infer<typeof leadSchema>;
 
 interface LeadFormProps {
   lead?: Lead;
-  onSubmit: (data: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  profiles: Profile[];
+  currentUserId: string;
+  isAdmin: boolean;
+  onSubmit: (data: LeadInput) => Promise<void>;
   onCancel: () => void;
 }
 
-export function LeadForm({ lead, onSubmit, onCancel }: LeadFormProps) {
+export function LeadForm({ lead, profiles, currentUserId, isAdmin, onSubmit, onCancel }: LeadFormProps) {
+  const assignableProfiles = isAdmin ? profiles : profiles.filter((profile) => profile.id === currentUserId);
+
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LeadFormData>({
-    resolver: zodResolver(leadSchema) as any,
+    resolver: zodResolver(leadSchema) as never,
     defaultValues: lead ? {
       fullName: lead.fullName,
       email: lead.email,
@@ -50,20 +55,26 @@ export function LeadForm({ lead, onSubmit, onCancel }: LeadFormProps) {
       status: 'new',
       priority: 'medium',
       source: 'website',
-      assignedToId: teamMembers[0].id,
+      assignedToId: currentUserId,
     },
   });
 
   const onFormSubmit = async (data: LeadFormData) => {
-    const member = teamMembers.find((m) => m.id === data.assignedToId);
     await onSubmit({
-      ...data,
-      assignedTo: member?.name ?? '',
+      fullName: data.fullName,
+      email: data.email,
+      phone: data.phone,
+      company: data.company,
+      jobTitle: data.jobTitle,
+      source: data.source,
+      status: data.status,
+      priority: data.priority,
+      assignedToId: data.assignedToId,
       dealValue: data.dealValue || undefined,
       notes: data.notes || undefined,
       location: data.location || undefined,
       website: data.website || undefined,
-    } as Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>);
+    });
   };
 
   return (
@@ -76,7 +87,7 @@ export function LeadForm({ lead, onSubmit, onCancel }: LeadFormProps) {
         <Input label="Job Title" {...register('jobTitle')} error={errors.jobTitle?.message} placeholder="VP of Sales" />
         <Input label="Location" {...register('location')} placeholder="San Francisco, CA" />
         <Input label="Website" {...register('website')} placeholder="company.com" />
-        <Input label="Deal Value ($)" type="number" {...register('dealValue')} placeholder="50000" />
+        <Input label="Deal Value ($)" type="number" step="0.01" {...register('dealValue')} placeholder="50000" />
         <Select label="Lead Source" {...register('source')} options={[
           { value: 'website', label: 'Website' },
           { value: 'referral', label: 'Referral' },
@@ -98,13 +109,18 @@ export function LeadForm({ lead, onSubmit, onCancel }: LeadFormProps) {
           { value: 'low', label: 'Low' },
           { value: 'medium', label: 'Medium' },
           { value: 'high', label: 'High' },
-          { value: 'critical', label: 'Critical' },
         ]} />
-        <Select label="Assigned To" {...register('assignedToId')} options={
-          teamMembers.map((m) => ({ value: m.id, label: m.name }))
-        } />
+        <Select
+          label="Assigned To"
+          {...register('assignedToId')}
+          disabled={!isAdmin}
+          options={assignableProfiles.map((profile) => ({ value: profile.id, label: profile.fullName || profile.email }))}
+        />
       </div>
       <Textarea label="Notes" {...register('notes')} rows={3} placeholder="Additional notes about this lead..." />
+      {!isAdmin && (
+        <p className="text-[11px] text-text-muted">Only admins can assign leads to other team members.</p>
+      )}
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
         <Button type="submit" loading={isSubmitting}>{lead ? 'Save Changes' : 'Create Lead'}</Button>

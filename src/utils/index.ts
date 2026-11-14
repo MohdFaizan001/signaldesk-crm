@@ -73,7 +73,6 @@ export const priorityConfig: Record<string, { label: string; color: string; bg: 
   low: { label: 'Low', color: 'text-slate-600', bg: 'bg-slate-50 border-slate-200', dot: 'bg-slate-400' },
   medium: { label: 'Medium', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', dot: 'bg-blue-400' },
   high: { label: 'High', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', dot: 'bg-amber-400' },
-  critical: { label: 'Critical', color: 'text-red-600', bg: 'bg-red-50 border-red-200', dot: 'bg-red-500' },
 };
 
 export const sourceLabels: Record<string, string> = {

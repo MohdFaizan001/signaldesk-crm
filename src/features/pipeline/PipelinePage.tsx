@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DndContext, closestCorners, PointerSensor, useSensor, useSensors,
@@ -7,9 +7,9 @@ import {
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useDroppable } from '@dnd-kit/core';
-import { GripVertical, Building2, DollarSign } from 'lucide-react';
-import { PriorityBadge, Avatar, LoadingSpinner } from '../../components/ui';
-import { useLeads } from '../../hooks';
+import { GripVertical, Building2, DollarSign, AlertCircle } from 'lucide-react';
+import { PriorityBadge, Avatar, LoadingSpinner, EmptyState } from '../../components/ui';
+import { useLeadsQuery, useUpdateLeadStatus } from '../../hooks';
 import { formatCurrency } from '../../utils';
 import type { Lead, LeadStatus } from '../../types';
 
@@ -23,23 +23,23 @@ const STAGES: { id: LeadStatus; label: string; color: string; dotColor: string }
 ];
 
 export function PipelinePage() {
-  const { leads, loading, fetchLeads, updateStatus } = useLeads();
+  const { data, isLoading, isError, error } = useLeadsQuery({ pageSize: 100, sortBy: 'created_at', sortDir: 'desc' });
+  const leads = data?.items ?? [];
+  const updateStatus = useUpdateLeadStatus();
   const navigate = useNavigate();
   const [activeDrag, setActiveDrag] = useState<Lead | null>(null);
-
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
   const getStageLeads = useCallback(
-    (stageId: LeadStatus) => leads.filter((l) => l.status === stageId),
+    (stageId: LeadStatus) => leads.filter((lead) => lead.status === stageId),
     [leads]
   );
 
   const handleDragStart = (event: DragStartEvent) => {
-    const lead = leads.find((l) => l.id === event.active.id);
+    const lead = leads.find((item) => item.id === event.active.id);
     if (lead) setActiveDrag(lead);
   };
 
@@ -51,29 +51,37 @@ export function PipelinePage() {
     const leadId = active.id as string;
     const overId = over.id as string;
 
-    // Check if dropped on a stage column directly
-    const targetStage = STAGES.find((s) => s.id === overId);
+    const targetStage = STAGES.find((stage) => stage.id === overId);
     if (targetStage) {
-      const lead = leads.find((l) => l.id === leadId);
+      const lead = leads.find((item) => item.id === leadId);
       if (lead && lead.status !== targetStage.id) {
-        updateStatus(leadId, targetStage.id);
+        updateStatus.mutate({ id: leadId, status: targetStage.id });
       }
       return;
     }
 
-    // Dropped on another lead card — determine that card's stage
-    const overLead = leads.find((l) => l.id === overId);
+    const overLead = leads.find((item) => item.id === overId);
     if (overLead) {
-      const draggedLead = leads.find((l) => l.id === leadId);
+      const draggedLead = leads.find((item) => item.id === leadId);
       if (draggedLead && draggedLead.status !== overLead.status) {
-        updateStatus(leadId, overLead.status);
+        updateStatus.mutate({ id: leadId, status: overLead.status });
       }
     }
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (isLoading) return <LoadingSpinner />;
 
-  const totalValue = leads.reduce((sum, l) => sum + (l.dealValue || 0), 0);
+  if (isError) {
+    return (
+      <EmptyState
+        icon={<AlertCircle className="w-5 h-5" />}
+        title="Could not load the pipeline"
+        description={error instanceof Error ? error.message : 'The API request failed.'}
+      />
+    );
+  }
+
+  const totalValue = leads.reduce((sum, lead) => sum + (lead.dealValue || 0), 0);
 
   return (
     <div className="space-y-4 animate-fade-in">
